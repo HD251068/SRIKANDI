@@ -1,11 +1,11 @@
 // next.config.js
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  // Izinkan server-side environment variables
   serverExternalPackages: ['@anthropic-ai/sdk'],
 
-  // Headers keamanan untuk data sensitif kepolisian
   async headers() {
+    const isDev = process.env.NODE_ENV === 'development'
+
     return [
       {
         source: '/(.*)',
@@ -16,19 +16,23 @@ const nextConfig = {
           {
             key: 'Permissions-Policy',
             value: 'camera=(), microphone=(self), geolocation=()',
-            // microphone diizinkan untuk STT
           },
+          // CSP — izinkan Vercel Live di dev, ketat di production
           {
             key: 'Content-Security-Policy',
-            value: [
-              "default-src 'self'",
-              "script-src 'self' 'unsafe-eval' 'unsafe-inline'",
-              "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
-              "font-src 'self' https://fonts.gstatic.com",
-              "connect-src 'self' https://*.supabase.co https://api.anthropic.com https://api.deepseek.com",
-              "img-src 'self' data: blob: https://*.supabase.co",
-              "media-src 'self' blob:",
-            ].join('; '),
+            value: isDev
+              ? "default-src * 'unsafe-inline' 'unsafe-eval' data: blob:"
+              : [
+                  "default-src 'self'",
+                  "script-src 'self' 'unsafe-eval' 'unsafe-inline' https://vercel.live",
+                  "script-src-elem 'self' 'unsafe-inline' https://vercel.live",
+                  "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
+                  "font-src 'self' https://fonts.gstatic.com",
+                  "connect-src 'self' https://*.supabase.co https://api.anthropic.com https://api.deepseek.com https://vercel.live wss://ws-us3.pusher.com",
+                  "img-src 'self' data: blob: https://*.supabase.co https://vercel.live",
+                  "media-src 'self' blob:",
+                  "frame-src 'self' https://vercel.live",
+                ].join('; '),
           },
         ],
       },
