@@ -1,31 +1,36 @@
 // src/app/api/auth/route.ts
 // ============================================================
 // SRIKANDI — API Route: Authentication
-// POST /api/auth/login    — login penyidik
-// POST /api/auth/logout   — logout
-// GET  /api/auth/me       — profil penyidik aktif
+// POST /api/auth  { action: 'login'|'logout', email, password }
+// GET  /api/auth  — profil penyidik aktif (butuh Authorization header)
 // ============================================================
 
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { getPenyidikProfile } from '@/lib/supabase'
 
-// Lazy admin client — runtime only
+// Lazy admin client — hanya dibuat saat ada request masuk
 function getAdminClient() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY
-  if (!url || !key) throw new Error('Missing Supabase admin env vars')
+  if (!url || !key) {
+    throw new Error(
+      'Supabase env vars belum dikonfigurasi. ' +
+      'Tambahkan NEXT_PUBLIC_SUPABASE_URL dan SUPABASE_SERVICE_ROLE_KEY ' +
+      'di Vercel Dashboard → Settings → Environment Variables'
+    )
+  }
   return createClient(url, key)
 }
 
 // ——————————————————————————————————————
-// POST /api/auth — Login
+// POST — Login / Logout
 // ——————————————————————————————————————
 export async function POST(req: NextRequest) {
   try {
-    const { action, email, password } = await req.json()
+    const body = await req.json().catch(() => ({}))
+    const { action, email, password } = body
 
-    // LOGIN
     if (action === 'login') {
       if (!email || !password) {
         return NextResponse.json(
@@ -46,7 +51,6 @@ export async function POST(req: NextRequest) {
         )
       }
 
-      // Ambil profil penyidik
       const profil = await getPenyidikProfile(data.user.id)
 
       if (!profil || !profil.is_active) {
@@ -72,7 +76,6 @@ export async function POST(req: NextRequest) {
       })
     }
 
-    // LOGOUT
     if (action === 'logout') {
       const authHeader = req.headers.get('Authorization')
       if (authHeader) {
@@ -88,7 +91,7 @@ export async function POST(req: NextRequest) {
     )
 
   } catch (err) {
-    console.error('[SRIKANDI] auth error:', err)
+    console.error('[SRIKANDI] auth POST error:', err)
     return NextResponse.json(
       { error: err instanceof Error ? err.message : 'Internal server error' },
       { status: 500 }
@@ -97,14 +100,15 @@ export async function POST(req: NextRequest) {
 }
 
 // ——————————————————————————————————————
-// GET /api/auth — Profil penyidik aktif
+// GET — Profil penyidik aktif
 // ——————————————————————————————————————
 export async function GET(req: NextRequest) {
   try {
     const authHeader = req.headers.get('Authorization')
     if (!authHeader) {
+      // Bukan error — browser kadang hit endpoint ini tanpa header
       return NextResponse.json(
-        { error: 'Authorization header tidak ditemukan' },
+        { error: 'Authorization header tidak ditemukan', authenticated: false },
         { status: 401 }
       )
     }
@@ -114,7 +118,7 @@ export async function GET(req: NextRequest) {
 
     if (error || !user) {
       return NextResponse.json(
-        { error: 'Token tidak valid atau sudah expired' },
+        { error: 'Token tidak valid atau sudah expired', authenticated: false },
         { status: 401 }
       )
     }
@@ -127,9 +131,10 @@ export async function GET(req: NextRequest) {
       )
     }
 
-    return NextResponse.json({ success: true, user: profil })
+    return NextResponse.json({ success: true, authenticated: true, user: profil })
 
   } catch (err) {
+    console.error('[SRIKANDI] auth GET error:', err)
     return NextResponse.json(
       { error: err instanceof Error ? err.message : 'Internal server error' },
       { status: 500 }
