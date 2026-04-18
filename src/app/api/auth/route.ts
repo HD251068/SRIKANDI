@@ -10,10 +10,13 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { getPenyidikProfile } from '@/lib/supabase'
 
-const supabaseAdmin = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-)
+// Lazy admin client — runtime only
+function getAdminClient() {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY
+  if (!url || !key) throw new Error('Missing Supabase admin env vars')
+  return createClient(url, key)
+}
 
 // ——————————————————————————————————————
 // POST /api/auth — Login
@@ -31,7 +34,7 @@ export async function POST(req: NextRequest) {
         )
       }
 
-      const { data, error } = await supabaseAdmin.auth.signInWithPassword({
+      const { data, error } = await getAdminClient().auth.signInWithPassword({
         email,
         password,
       })
@@ -74,7 +77,7 @@ export async function POST(req: NextRequest) {
       const authHeader = req.headers.get('Authorization')
       if (authHeader) {
         const token = authHeader.replace('Bearer ', '')
-        await supabaseAdmin.auth.admin.signOut(token)
+        await getAdminClient().auth.admin.signOut(token)
       }
       return NextResponse.json({ success: true, message: 'Berhasil logout' })
     }
@@ -107,7 +110,7 @@ export async function GET(req: NextRequest) {
     }
 
     const token = authHeader.replace('Bearer ', '')
-    const { data: { user }, error } = await supabaseAdmin.auth.getUser(token)
+    const { data: { user }, error } = await getAdminClient().auth.getUser(token)
 
     if (error || !user) {
       return NextResponse.json(
