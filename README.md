@@ -1,105 +1,119 @@
-# SRIKANDI "Sistem Riset Intelijen Kriminal Andalan Indonesia"
-# PIIP System — MVP
-## Pre-Interrogation Intelligence Package
-### Stack: Next.js + Supabase + Vercel + Claude AI
+# SRIKANDI
+## Sistem Riset Intelijen Kriminal Andalan Indonesia
+### Stack: Next.js 15 · Supabase · Vercel · Claude AI · DeepSeek
 
 ---
 
-## 📁 Struktur Project
+## 📁 Struktur Lengkap Repository
 
 ```
-piip-mvp/
+SRIKANDI/                               ← Root repo
+│
+├── .env.example                        ← Template env vars (commit)
+├── .env.local                          ← Env vars aktif (JANGAN commit)
+├── .gitignore
+├── next.config.js                      ← Next.js config + security headers
+├── package.json                        ← Dependencies
+├── postcss.config.js                   ← PostCSS untuk Tailwind
+├── tailwind.config.ts                  ← Design system SRIKANDI
+├── tsconfig.json                       ← TypeScript config
+│
 ├── supabase/
-│   ├── schema.sql          ← Database schema (jalankan di Supabase SQL Editor)
-│   └── seed.sql            ← Data testing
+│   └── schema.sql                      ← 14 tabel + RLS + triggers + seed
 │
-├── src/
-│   ├── app/                ← Next.js App Router
-│   │   ├── (auth)/
-│   │   │   ├── login/
-│   │   │   └── register/
-│   │   ├── (dashboard)/
-│   │   │   ├── page.tsx            ← Dashboard utama
-│   │   │   ├── kasus/
-│   │   │   │   ├── page.tsx        ← List semua kasus
-  │   │   │   ├── [id]/
-│   │   │   │   │   ├── page.tsx    ← Detail kasus
-│   │   │   │   │   ├── piip/       ← Input PIIP 6 modul
-│   │   │   │   │   ├── interogasi/ ← Sesi interogasi + STT
-│   │   │   │   │   └── bap/        ← Generate BAP
-│   │   │   │   └── new/
-│   │   │   │       └── page.tsx    ← Buat kasus baru
-│   │   └── api/
-│   │       ├── generate-piip/      ← Claude API integration
-│   │       ├── generate-bap/       ← BAP generator
-│   │       └── stt/                ← Speech-to-text endpoint
-│   │
-│   ├── components/
-│   │   ├── piip/                   ← 6 modul input form
-│   │   ├── interogasi/             ← Sesi interogasi UI
-│   │   ├── dashboard/              ← Widgets & charts
-│   │   └── ui/                     ← Shared components
-│   │
-│   ├── lib/
-│   │   ├── supabase.ts             ← Supabase client
-│   │   ├── claude.ts               ← Anthropic client
-│   │   └── types.ts                ← TypeScript types
-│   │
-│   └── styles/
-│       └── globals.css
-│
-├── .env.local                      ← Environment variables (JANGAN di-commit!)
-├── .env.example                    ← Template env vars
-├── package.json
-└── README.md
+└── src/
+    ├── middleware.ts                   ← Route protection (auth guard)
+    │
+    ├── lib/                            ← Core library — jantung sistem
+    │   ├── types.ts                    ← Semua TypeScript types
+    │   ├── supabase.ts                 ← Database client + semua fungsi DB
+    │   ├── deepseek.ts                 ← Analytical engine (Twin Engine #1)
+    │   └── claude.ts                   ← Orchestrator + language (Twin Engine #2)
+    │
+    └── app/                            ← Next.js App Router
+        ├── globals.css                 ← Design system + scanline aesthetic
+        ├── layout.tsx                  ← Root layout
+        ├── page.tsx                    ← Root → redirect /login
+        │
+        ├── login/
+        │   └── page.tsx                ← Halaman login penyidik
+        │
+        ├── dashboard/
+        │   └── page.tsx                ← Dashboard utama (WIP)
+        │
+        └── api/                        ← API Routes (Next.js Route Handlers)
+            ├── auth/
+            │   └── route.ts            ← POST login/logout · GET /me
+            ├── kasus/
+            │   └── route.ts            ← GET list/detail · POST create · PATCH update
+            ├── generate-piip/
+            │   └── route.ts            ← POST twin engine → intelligence package
+            ├── interogasi/
+            │   └── route.ts            ← POST real-time analysis · PUT buat sesi
+            └── bap/
+                └── route.ts            ← POST generate BAP · GET list BAP
 ```
 
 ---
 
-## 🚀 Setup Instructions
+## 📐 Konvensi Header File
 
-### 1. Clone & Install
-```bash
-git clone https://github.com/[username]/piip-mvp.git
-cd piip-mvp
-npm install
+**Setiap file wajib mencantumkan path-nya di baris pertama** sehingga saat membaca file tidak perlu kembali ke README.
+
+Format per jenis file:
+```ts
+// src/lib/claude.ts                    ← .ts / .tsx / .js
+```
+```css
+/* src/app/globals.css */              ← .css
+```
+```js
+// next.config.js                      ← root-level .js
 ```
 
-### 2. Setup Supabase
-1. Buat project baru di [supabase.com](https://supabase.com)
-2. Buka SQL Editor
-3. Copy & paste isi `supabase/schema.sql`
-4. Jalankan (Run)
-
-### 3. Environment Variables
-Buat file `.env.local`:
-```env
-# Supabase
-NEXT_PUBLIC_SUPABASE_URL=https://[project-id].supabase.co
-NEXT_PUBLIC_SUPABASE_ANON_KEY=[anon-key]
-SUPABASE_SERVICE_ROLE_KEY=[service-role-key]
-
-# Anthropic
-ANTHROPIC_API_KEY=[api-key]
-
-# App
-NEXT_PUBLIC_APP_URL=http://localhost:3000
-```
-
-### 4. Run Development
-```bash
-npm run dev
-```
-
-### 5. Deploy ke Vercel
-```bash
-npx vercel
-# Ikuti instruksi, tambahkan env vars di Vercel dashboard
+File lib yang memiliki header panjang menggunakan baris kedua:
+```ts
+// ============================================================
+// PATH: src/lib/claude.ts
+// SRIKANDI — Twin Engine Orchestrator
+// ============================================================
 ```
 
 ---
 
-## 📊 Database Tables
+## 🏗 Arsitektur Twin Engine
+
+```
+Input Data Kasus (6 modul PIIP)
+          │
+          ▼
+┌─────────────────────┐
+│   DeepSeek Reasoner │  ← Analisis logika, inkonsistensi,
+│   (deepseek.ts)     │    korelasi bukti, legal mapping,
+│                     │    confidence scoring per temuan
+└──────────┬──────────┘
+           │ Structured JSON analysis
+           ▼
+┌─────────────────────┐
+│   Claude Sonnet     │  ← Bahasa & strategi: narasi intelijen,
+│   (claude.ts)       │    profil psikologis, jebakan logika,
+│   Orchestrator      │    rekomendasi taktik interogasi
+└──────────┬──────────┘
+           │
+           ▼
+  SRIKANDI Intelligence Package
+  (9 modul output siap pakai)
+```
+
+**Prinsip Zero Fracture:**
+Claude merancang format output DeepSeek → DeepSeek bekerja dalam "rel" Claude → Output masuk ke Claude dalam format yang sudah diekspektasikan → Tidak ada ambiguitas antar engine.
+
+**Efisiensi Real-Time Interogasi:**
+DeepSeek menganalisis setiap kalimat tersangka (murah & cepat). Claude hanya dipanggil jika DeepSeek mendeteksi signal kuat (confidence > 0.6). Penyidik tidak merasakan delay.
+
+---
+
+## 🗄 Database (14 Tabel Supabase)
 
 | Tabel | Fungsi |
 |-------|--------|
@@ -110,36 +124,89 @@ npx vercel
 | `alat_bukti` | Inventaris barang bukti |
 | `saksi` | Data & keterangan saksi |
 | `framework_hukum` | Pasal & unsur delik |
-| `digital_forensik` | Jejak digital |
+| `digital_forensik` | Jejak digital 5 kategori |
 | `inkonsistensi_digital` | Konfrontasi digital vs klaim |
 | `sesi_interogasi` | Session tracking |
-| `transcript_interogasi` | STT output + koreksi |
+| `transcript_interogasi` | STT output + koreksi + WER |
 | `intelligence_package` | Output analisis Claude |
 | `bap_draft` | Draft BAP generated |
 | `audit_log` | Chain of custody digital |
 
 ---
 
-## 💰 Estimasi Biaya MVP (Per Bulan)
+## 🚀 Setup
 
-| Service | Free Tier | Estimasi Pilot |
-|---------|-----------|----------------|
-| Vercel | 100GB bandwidth | Cukup |
-| Supabase | 500MB DB, 2GB storage | Cukup untuk 1 Polsek |
-| Anthropic API | Pay per use | ~Rp 500rb/bulan (50 kasus) |
-| **Total** | | **< Rp 500rb/bulan** |
+### 1. Clone & Install
+```bash
+git clone https://github.com/[username]/SRIKANDI.git
+cd SRIKANDI
+npm install
+```
+
+### 2. Setup Supabase
+1. Buat project di [supabase.com](https://supabase.com)
+2. SQL Editor → paste `supabase/schema.sql` → Run
+
+### 3. Environment Variables
+Buat `.env.local` dari template `.env.example`:
+```env
+NEXT_PUBLIC_SUPABASE_URL=
+NEXT_PUBLIC_SUPABASE_ANON_KEY=
+SUPABASE_SERVICE_ROLE_KEY=
+ANTHROPIC_API_KEY=
+DEEPSEEK_API_KEY=
+NEXT_PUBLIC_USE_TWIN_ENGINE=true
+```
+
+### 4. Development
+```bash
+npm run dev        # http://localhost:3000
+npm run type-check # TypeScript check
+npm run build      # Production build
+```
+
+### 5. Deploy Vercel
+```bash
+npx vercel
+# Tambah semua env vars di Vercel Dashboard → Settings → Environment Variables
+```
 
 ---
 
-## 🗓 Roadmap MVP
+## 💰 Estimasi Biaya Operasional
 
-- [x] Database Schema
-- [ ] Auth (Login penyidik)
-- [ ] PIIP Input Form (6 modul)
-- [ ] Claude API Integration
-- [ ] Save & Retrieve Kasus
-- [ ] Generate Intelligence Package
-- [ ] Export BAP PDF
-- [ ] STT Integration
-- [ ] Dashboard Supervisor
-- [ ] Pilot Deploy (1 Polsek)
+| Komponen | Biaya |
+|----------|-------|
+| Vercel (hosting) | Free tier — cukup untuk pilot |
+| Supabase (database) | Free tier — cukup untuk 1 Polsek |
+| Anthropic Claude API | ~Rp 8.000/kasus (Claude Sonnet) |
+| DeepSeek API | ~Rp 1.500/kasus (DeepSeek Reasoner) |
+| **Total per kasus** | **~Rp 9.500/kasus** |
+| **Harga ke Polri** | **Rp 200.000/BAP** |
+| **Gross margin** | **~95%** |
+
+---
+
+## 🗓 Roadmap
+
+### ✅ Selesai
+- Database schema (14 tabel + RLS + audit log)
+- TypeScript types lengkap
+- Supabase client + semua fungsi DB
+- DeepSeek analytical engine
+- Claude orchestrator + twin engine
+- API Routes: auth, kasus, generate-piip, interogasi, bap
+- Middleware route protection
+- Halaman login
+
+### 🔄 Dalam Pengerjaan
+- Dashboard utama (statistik + list kasus)
+- Form PIIP 6 modul (Next.js + simpan ke DB)
+- Ruang interogasi real-time + STT
+- Generate & export BAP ke PDF
+
+### 📋 Berikutnya
+- STT integration (Whisper)
+- Dashboard supervisor
+- WER analytics
+- Legal Digital Gateway (operator integration)
