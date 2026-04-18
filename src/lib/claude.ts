@@ -18,9 +18,12 @@ import {
 } from './deepseek'
 import type { PIIPFormData, GeneratePIIPResponse } from './types'
 
-const anthropic = new Anthropic({
-  apiKey: process.env.ANTHROPIC_API_KEY!,
-})
+// Lazy Anthropic client — runtime only
+function getAnthropicClient() {
+  const key = process.env.ANTHROPIC_API_KEY
+  if (!key) throw new Error('Missing ANTHROPIC_API_KEY env var')
+  return new Anthropic({ apiKey: key })
+}
 
 const MODEL = 'claude-sonnet-4-20250514'
 
@@ -100,7 +103,7 @@ export async function generateIntelligencePackage(
     ? buildPromptWithDeepSeek(data, deepseekAnalysis)
     : buildPromptClaudeOnly(data)
 
-  const response = await anthropic.messages.create({
+  const response = await getAnthropicClient().messages.create({
     model: MODEL,
     max_tokens: 4000,
     system: CLAUDE_SYSTEM_PROMPT,
@@ -261,7 +264,7 @@ export async function analyzeStatementRealtime(params: {
   let claudeSuggestion: string | undefined
 
   if (deepseekSignal.flagged && deepseekSignal.confidence > 0.6) {
-    const response = await anthropic.messages.create({
+    const response = await getAnthropicClient().messages.create({
       model: MODEL,
       max_tokens: 300,
       system: CLAUDE_SYSTEM_PROMPT,
@@ -305,7 +308,7 @@ export async function generateBAPDraft(params: {
   nomorSesi: number
 }): Promise<string> {
 
-  const response = await anthropic.messages.create({
+  const response = await getAnthropicClient().messages.create({
     model: MODEL,
     max_tokens: 4000,
     system: CLAUDE_SYSTEM_PROMPT,
