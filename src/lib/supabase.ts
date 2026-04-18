@@ -1,24 +1,43 @@
 // ============================================================
 // PATH: src/lib/supabase.ts
 // SRIKANDI — Supabase Client
-// Sistem Riset Intelijen Kriminal Andalan Indonesia
+// Lazy initialization — client dibuat saat runtime bukan build time
 // ============================================================
 
-import { createClient } from '@supabase/supabase-js'
+import { createClient, SupabaseClient } from '@supabase/supabase-js'
 import type { Kasus, Tersangka, Korban, AlatBukti, Saksi,
   FrameworkHukum, DigitalForensik, InkonsistensiDigital,
   SesiInterogasi, TranscriptInterogasi, IntelligencePackage,
   BAPDraft, Penyidik } from './types'
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+// ============================================================
+// LAZY CLIENT — tidak dieksekusi saat build time
+// Mencegah error "Missing env vars" di Vercel build phase
+// ============================================================
+let _client: SupabaseClient | null = null
 
-if (!supabaseUrl || !supabaseAnonKey) {
-  throw new Error('Missing Supabase environment variables. Cek .env.local')
+function getClient(): SupabaseClient {
+  if (_client) return _client
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL
+  const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+  if (!url || !key) {
+    throw new Error(
+      'Missing Supabase environment variables.\n' +
+      'Tambahkan NEXT_PUBLIC_SUPABASE_URL dan NEXT_PUBLIC_SUPABASE_ANON_KEY\n' +
+      'di Vercel Dashboard → Settings → Environment Variables'
+    )
+  }
+  _client = createClient(url, key)
+  return _client
 }
 
-// Client untuk browser (dengan auth session)
-export const supabase = createClient(supabaseUrl, supabaseAnonKey)
+// Export helper — pakai ini di semua fungsi DB
+export const supabase = new Proxy({} as SupabaseClient, {
+  get(_, prop) {
+    return (getClient() as any)[prop]
+  }
+})
+
 
 // ============================================================
 // AUTH HELPERS
