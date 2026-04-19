@@ -27,24 +27,41 @@ export async function GET(req: NextRequest) {
     const id = searchParams.get('id')
 
     if (id) {
-      const { data, error } = await sc()
-        .from('kasus')
-        .select(`
-          *,
-          penyidik (nama_lengkap, pangkat, nrp, jabatan, satuan),
-          tersangka (*),
-          korban (*),
-          alat_bukti (*),
-          saksi (*),
-          framework_hukum (*),
-          digital_forensik (*, inkonsistensi_digital (*)),
-          intelligence_package (*)
-        `)
-        .eq('id', id)
-        .single()
+      // Query bertahap — hindari join kompleks yang bisa gagal
+      const { data: kasus, error: kErr } = await sc()
+        .from('kasus').select('*').eq('id', id).single()
+      if (kErr) throw new Error(`Kasus tidak ditemukan: ${kErr.message}`)
 
-      if (error) throw new Error(error.message)
-      return NextResponse.json({ success: true, data })
+      // Relasi — ambil satu per satu, tidak fatal kalau gagal
+      const [tersangka, korban, bukti, saksi, fw, dig, intel] = await Promise.all([
+        sc().from('tersangka').select('*').eq('kasus_id', id),
+        sc().from('korban').select('*').eq('kasus_id', id),
+        sc().from('alat_bukti').select('*').eq('kasus_id', id),
+        sc().from('saksi').select('*').eq('kasus_id', id),
+        sc().from('framework_hukum').select('*').eq('kasus_id', id).maybeSingle(),
+        sc().from('digital_forensik').select('*').eq('kasus_id', id).maybeSingle(),
+        sc().from('intelligence_package').select('*').eq('kasus_id', id).order('versi', { ascending: false }).limit(1),
+      ])
+
+      // Inkonsistensi digital
+      let inkonsistensi = { data: [] }
+      if (dig.data?.id) {
+        inkonsistensi = await sc().from('inkonsistensi_digital').select('*').eq('kasus_id', id) as any
+      }
+
+      return NextResponse.json({
+        success: true,
+        data: {
+          ...kasus,
+          tersangka: tersangka.data ?? [],
+          korban: korban.data ?? [],
+          alat_bukti: bukti.data ?? [],
+          saksi: saksi.data ?? [],
+          framework_hukum: fw.data ?? null,
+          digital_forensik: dig.data ? { ...dig.data, inkonsistensi_digital: inkonsistensi.data } : null,
+          intelligence_package: intel.data ?? [],
+        }
+      })
     }
 
     const { data, error } = await sc()
