@@ -19,13 +19,44 @@ import {
 import type { PIIPFormData, GeneratePIIPResponse } from './types'
 
 // Lazy Anthropic client — runtime only
+// Dual-mode client: Anthropic langsung atau OpenRouter sebagai fallback
+// OpenRouter mendukung claude-sonnet via API yang kompatibel dengan Anthropic SDK
 function getAnthropicClient() {
-  const key = process.env.ANTHROPIC_API_KEY
-  if (!key) throw new Error('Missing ANTHROPIC_API_KEY env var')
-  return new Anthropic({ apiKey: key })
+  const anthropicKey = process.env.ANTHROPIC_API_KEY
+  const openrouterKey = process.env.OPENROUTER_API_KEY
+
+  if (anthropicKey) {
+    // Mode 1: Anthropic langsung
+    return new Anthropic({ apiKey: anthropicKey })
+  }
+
+  if (openrouterKey) {
+    // Mode 2: OpenRouter sebagai fallback — kompatibel dengan Anthropic SDK
+    return new Anthropic({
+      apiKey: openrouterKey,
+      baseURL: 'https://openrouter.ai/api/v1',
+      defaultHeaders: {
+        'HTTP-Referer': process.env.NEXT_PUBLIC_APP_URL ?? 'https://srikandi.vercel.app',
+        'X-Title': 'SRIKANDI — Sistem Riset Intelijen Kriminal Andalan Indonesia',
+      },
+    })
+  }
+
+  throw new Error(
+    'Tidak ada AI API key. Set ANTHROPIC_API_KEY atau OPENROUTER_API_KEY ' +
+    'di Vercel Dashboard → Settings → Environment Variables'
+  )
 }
 
-const MODEL = 'claude-sonnet-4-20250514'
+// Model selector — OpenRouter pakai format provider/model
+function getModel(): string {
+  if (process.env.ANTHROPIC_API_KEY) {
+    return 'claude-sonnet-4-20250514'
+  }
+  // OpenRouter model ID untuk Claude Sonnet
+  return 'anthropic/claude-sonnet-4-5'
+}
+
 
 // ============================================================
 // CLAUDE SYSTEM PROMPT
@@ -104,7 +135,7 @@ export async function generateIntelligencePackage(
     : buildPromptClaudeOnly(data)
 
   const response = await getAnthropicClient().messages.create({
-    model: MODEL,
+    model: getModel(),
     max_tokens: 4000,
     system: CLAUDE_SYSTEM_PROMPT,
     messages: [{ role: 'user', content: claudePrompt }],
@@ -265,7 +296,7 @@ export async function analyzeStatementRealtime(params: {
 
   if (deepseekSignal.flagged && deepseekSignal.confidence > 0.6) {
     const response = await getAnthropicClient().messages.create({
-      model: MODEL,
+      model: getModel(),
       max_tokens: 300,
       system: CLAUDE_SYSTEM_PROMPT,
       messages: [{
@@ -309,7 +340,7 @@ export async function generateBAPDraft(params: {
 }): Promise<string> {
 
   const response = await getAnthropicClient().messages.create({
-    model: MODEL,
+    model: getModel(),
     max_tokens: 4000,
     system: CLAUDE_SYSTEM_PROMPT,
     messages: [{
