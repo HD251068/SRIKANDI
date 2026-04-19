@@ -64,18 +64,24 @@ export async function GET(req: NextRequest) {
       })
     }
 
-    const { data, error } = await sc()
+    // Ambil kasus tanpa join penyidik untuk hindari ambiguous relationship
+    const { data: kasusList, error } = await sc()
       .from('kasus')
-      .select(`
-        *,
-        penyidik (nama_lengkap, pangkat, nrp),
-        tersangka (id, nama_lengkap),
-        korban (id, nama_lengkap, kondisi)
-      `)
+      .select('*')
       .order('created_at', { ascending: false })
 
     if (error) throw new Error(error.message)
-    return NextResponse.json({ success: true, data })
+
+    // Ambil tersangka dan korban untuk setiap kasus
+    const enriched = await Promise.all((kasusList ?? []).map(async (k: any) => {
+      const [t, ko] = await Promise.all([
+        sc().from('tersangka').select('id, nama_lengkap').eq('kasus_id', k.id).limit(1),
+        sc().from('korban').select('id, nama_lengkap, kondisi').eq('kasus_id', k.id).limit(3),
+      ])
+      return { ...k, tersangka: t.data ?? [], korban: ko.data ?? [] }
+    }))
+
+    return NextResponse.json({ success: true, data: enriched })
 
   } catch (err) {
     console.error('[SRIKANDI] GET /api/kasus error:', err)
