@@ -36,7 +36,8 @@ function getAI() {
           'X-Title': 'SRIKANDI',
         },
       }),
-      model: 'anthropic/claude-sonnet-4-5',
+      // Model yang tersedia di OpenRouter free tier
+      model: 'anthropic/claude-3-haiku',
     }
   }
   throw new Error('Tidak ada AI API key. Set ANTHROPIC_API_KEY atau OPENROUTER_API_KEY')
@@ -100,37 +101,44 @@ export async function POST(req: NextRequest) {
 
     const nextVersion = existing ? (existing.versi + 1) : 1
 
-    // Build prompt
-    const prompt = `Kamu adalah SRIKANDI-AI, sistem analis intelijen kriminal untuk kepolisian Indonesia.
+    // Build compact prompt - hindari timeout Vercel 10s
+    const kasusRingkas = {
+      jenis: piipData?.kejadian?.jenis_pidana,
+      kronologi: piipData?.kejadian?.kronologi,
+      tersangka: piipData?.tersangka?.nama_lengkap,
+      motif: piipData?.tersangka?.dugaan_motif,
+      bukti: (piipData?.alat_bukti ?? []).map((b: any) => b.deskripsi).join(', '),
+      pasal: (piipData?.framework_hukum?.pasal_diduga ?? []).join(', '),
+      gaya: piipData?.meta?.gaya_interogasi,
+      threat: piipData?.meta?.threat_level,
+    }
 
-Analisis data kasus berikut dan hasilkan Intelligence Package komprehensif.
+    const prompt = \`Kamu adalah SRIKANDI-AI, analis intelijen kriminal Indonesia.
+Analisis kasus ini dan hasilkan Intelligence Package. HANYA JSON, tanpa teks lain.
 
-DATA KASUS:
-${JSON.stringify(piipData, null, 2)}
+KASUS: \${JSON.stringify(kasusRingkas)}
 
-Hasilkan analisis dalam format JSON. HANYA JSON, tanpa teks lain, tanpa markdown backtick.
-
-{
-  "intelligence_brief": "Ringkasan eksekutif 3-4 paragraf: posisi kasus, kekuatan bukti, rekomendasi utama",
-  "profil_psikologis": "Analisis kepribadian tersangka dan titik kerentanan psikologis untuk interogasi",
-  "analisis_bukti": "Analisis kritis kekuatan dan kelemahan setiap bukti fisik",
-  "digital_forensic_brief": "Analisis jejak digital: konfirmasi, inkonsistensi, dan gap yang perlu digali",
-  "gap_analysis": "Gap informasi kritis yang harus digali dalam interogasi",
-  "strategi_pembuka": "5 pertanyaan pembuka strategis dengan tujuan psikologis masing-masing",
-  "jebakan_logika": "3 skenario jebakan logika berbasis inkonsistensi data",
-  "red_flags": "Hal-hal yang perlu diwaspadai selama interogasi",
-  "rekomendasi_taktik": "Panduan taktis lengkap sesuai gaya interogasi dan profil tersangka"
-}`
+Output JSON:
+{"intelligence_brief":"ringkasan 2 paragraf posisi kasus dan rekomendasi","profil_psikologis":"analisis kepribadian tersangka dan kerentanan psikologis","analisis_bukti":"kekuatan dan kelemahan bukti","digital_forensic_brief":"status jejak digital","gap_analysis":"apa yang masih perlu digali","strategi_pembuka":"3 pertanyaan pembuka strategis","jebakan_logika":"2 skenario konfrontasi inkonsistensi","red_flags":"hal yang perlu diwaspadai","rekomendasi_taktik":"panduan taktis interogasi"}\`
 
     // Call AI
     const { client, model } = getAI()
     console.log('[SRIKANDI] Using model:', model)
+    console.log('[SRIKANDI] ANTHROPIC_KEY exists:', !!process.env.ANTHROPIC_API_KEY)
+    console.log('[SRIKANDI] OPENROUTER_KEY exists:', !!process.env.OPENROUTER_API_KEY)
 
-    const response = await client.messages.create({
-      model,
-      max_tokens: 4000,
-      messages: [{ role: 'user', content: prompt }],
-    })
+    let response: any
+    try {
+      response = await client.messages.create({
+        model,
+        max_tokens: 1500,
+        messages: [{ role: 'user', content: prompt }],
+      })
+      console.log('[SRIKANDI] AI response received, tokens:', response.usage)
+    } catch (aiErr: any) {
+      console.error('[SRIKANDI] AI call failed:', aiErr?.message, aiErr?.status, JSON.stringify(aiErr?.error ?? {}))
+      throw new Error(`AI error: ${aiErr?.message ?? 'Unknown AI error'}`)
+    }
 
     const rawText = response.content
       .filter((b: any) => b.type === 'text')
