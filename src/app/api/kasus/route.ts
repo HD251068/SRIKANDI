@@ -8,20 +8,15 @@
 // ============================================================
 
 import { NextRequest, NextResponse } from 'next/server'
-import {
-  getSemuaKasus,
-  getKasusById,
-  createKasus,
-  updateKasus,
-  upsertTersangka,
-  upsertKorban,
-  upsertAlatBukti,
-  upsertSaksi,
-  upsertFrameworkHukum,
-  upsertDigitalForensik,
-  upsertInkonsistensi,
-} from '@/lib/supabase'
-import type { PIIPFormData } from '@/lib/types'
+import { createClient } from '@supabase/supabase-js'
+
+// Service client langsung di route — bypass RLS sepenuhnya
+function sc() {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY
+  if (!url || !key) throw new Error('Missing Supabase env vars')
+  return createClient(url, key)
+}
 
 // ——————————————————————————————————————
 // GET — List atau Detail Kasus
@@ -32,33 +27,61 @@ export async function GET(req: NextRequest) {
     const id = searchParams.get('id')
 
     if (id) {
-      // Detail satu kasus lengkap dengan semua relasi
-      const kasus = await getKasusById(id)
-      return NextResponse.json({ success: true, data: kasus })
+      const { data, error } = await sc()
+        .from('kasus')
+        .select(`
+          *,
+          penyidik (nama_lengkap, pangkat, nrp, jabatan, satuan),
+          tersangka (*),
+          korban (*),
+          alat_bukti (*),
+          saksi (*),
+          framework_hukum (*),
+          digital_forensik (*, inkonsistensi_digital (*)),
+          intelligence_package (*)
+        `)
+        .eq('id', id)
+        .single()
+
+      if (error) throw new Error(error.message)
+      return NextResponse.json({ success: true, data })
     }
 
-    // List semua kasus
-    const kasus = await getSemuaKasus()
-    return NextResponse.json({ success: true, data: kasus })
+    const { data, error } = await sc()
+      .from('kasus')
+      .select(`
+        *,
+        penyidik (nama_lengkap, pangkat, nrp),
+        tersangka (id, nama_lengkap),
+        korban (id, nama_lengkap, kondisi)
+      `)
+      .order('created_at', { ascending: false })
+
+    if (error) throw new Error(error.message)
+    return NextResponse.json({ success: true, data })
 
   } catch (err) {
+    console.error('[SRIKANDI] GET /api/kasus error:', err)
     return NextResponse.json(
-      { error: err instanceof Error ? err.message : 'Gagal mengambil data kasus' },
+      { error: err instanceof Error ? err.message : 'Gagal mengambil data' },
       { status: 500 }
     )
   }
 }
 
 // ——————————————————————————————————————
-// POST — Buat Kasus Baru (lengkap semua modul)
+// POST — Buat Kasus Baru
 // ——————————————————————————————————————
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json()
-    const { piipData, penyidik_id } = body as {
-      piipData: PIIPFormData
-      penyidik_id: string
-    }
+    const { piipData, penyidik_id } = body
+
+    // Sanitize: convert empty strings to null for date/timestamp fields
+    const ts = (v: any) => (v && v !== '' ? v : null)
+
+    console.log('[SRIKANDI] POST /api/kasus — penyidik_id:', penyidik_id)
+    console.log('[SRIKANDI] nomor_lp:', piipData?.kejadian?.nomor_lp)
 
     if (!piipData || !penyidik_id) {
       return NextResponse.json(
@@ -67,57 +90,112 @@ export async function POST(req: NextRequest) {
       )
     }
 
+    if (!piipData.kejadian?.nomor_lp) {
+      return NextResponse.json(
+        { error: 'Nomor LP wajib diisi' },
+        { status: 400 }
+      )
+    }
+
     // 1. Buat kasus master
-    const kasus = await createKasus({
-      nomor_lp: piipData.kejadian.nomor_lp,
-      nomor_spdp: piipData.kejadian.nomor_spdp,
-      jenis_pidana: piipData.kejadian.jenis_pidana,
-      tanggal_kejadian: piipData.kejadian.tanggal_kejadian,
-      tanggal_laporan: piipData.kejadian.tanggal_laporan,
-      lokasi_kejadian: piipData.kejadian.lokasi_kejadian,
-      kronologi: piipData.kejadian.kronologi,
-      kondisi_tkp: piipData.kejadian.kondisi_tkp,
-      ada_cctv: piipData.kejadian.ada_cctv,
-      threat_level: piipData.meta.threat_level,
-      tujuan_interogasi: piipData.meta.tujuan_interogasi,
-      gaya_interogasi: piipData.meta.gaya_interogasi,
-      penyidik_id,
-    })
+    const { data: kasus, error: kasusError } = await sc()
+      .from('kasus')
+      .insert({
+        nomor_lp: piipData.kejadian.nomor_lp,
+        nomor_spdp: piipData.kejadian.nomor_spdp || null,
+        jenis_pidana: piipData.kejadian.jenis_pidana,
+        tanggal_kejadian: ts(piipData.kejadian.tanggal_kejadian),
+        tanggal_laporan: ts(piipData.kejadian.tanggal_laporan),
+        lokasi_kejadian: piipData.kejadian.lokasi_kejadian || null,
+        kronologi: piipData.kejadian.kronologi,
+        kondisi_tkp: piipData.kejadian.kondisi_tkp || null,
+        ada_cctv: piipData.kejadian.ada_cctv || null,
+        threat_level: piipData.meta?.threat_level ?? 3,
+        tujuan_interogasi: piipData.meta?.tujuan_interogasi || null,
+        gaya_interogasi: piipData.meta?.gaya_interogasi ?? 'PEACE',
+        penyidik_id,
+      })
+      .select()
+      .single()
+
+    if (kasusError) {
+      console.error('[SRIKANDI] Insert kasus error:', kasusError)
+      throw new Error(`Gagal simpan kasus: ${kasusError.message}`)
+    }
 
     const kasusId = kasus.id
+    console.log('[SRIKANDI] Kasus created:', kasusId)
 
-    // 2. Simpan semua relasi secara paralel
-    await Promise.all([
-      // Tersangka
-      upsertTersangka({ ...piipData.tersangka, kasus_id: kasusId }),
+    // 2. Tersangka — hanya jika ada nama
+    if (piipData.tersangka?.nama_lengkap) {
+      const { error: tErr } = await sc()
+        .from('tersangka')
+        .insert({ 
+          ...piipData.tersangka, 
+          kasus_id: kasusId,
+          tanggal_lahir: ts(piipData.tersangka.tanggal_lahir),
+        })
+      if (tErr) console.error('[SRIKANDI] Tersangka error:', tErr.message)
+    }
 
-      // Korban (array)
-      piipData.korban.length > 0
-        ? upsertKorban(piipData.korban.map(k => ({ ...k, kasus_id: kasusId })))
-        : Promise.resolve(),
+    // 3. Korban — filter yang ada nama
+    const korbanList = (piipData.korban ?? []).filter((k: any) => k.nama_lengkap)
+    if (korbanList.length > 0) {
+      const { error: kErr } = await sc()
+        .from('korban')
+        .insert(korbanList.map((k: any) => ({ ...k, kasus_id: kasusId, usia: k.usia ? parseInt(k.usia) : null })))
+      if (kErr) console.error('[SRIKANDI] Korban error:', kErr.message)
+    }
 
-      // Alat Bukti (array)
-      piipData.alat_bukti.length > 0
-        ? upsertAlatBukti(piipData.alat_bukti.map(b => ({ ...b, kasus_id: kasusId })))
-        : Promise.resolve(),
+    // 4. Alat Bukti — filter yang ada deskripsi
+    const buktiList = (piipData.alat_bukti ?? []).filter((b: any) => b.deskripsi)
+    if (buktiList.length > 0) {
+      const { error: bErr } = await sc()
+        .from('alat_bukti')
+        .insert(buktiList.map((b: any) => ({ ...b, kasus_id: kasusId })))
+      if (bErr) console.error('[SRIKANDI] Bukti error:', bErr.message)
+    }
 
-      // Saksi (array)
-      piipData.saksi.length > 0
-        ? upsertSaksi(piipData.saksi.map(s => ({ ...s, kasus_id: kasusId })))
-        : Promise.resolve(),
+    // 5. Saksi — filter yang ada nama
+    const saksiList = (piipData.saksi ?? []).filter((s: any) => s.nama_lengkap)
+    if (saksiList.length > 0) {
+      const { error: sErr } = await sc()
+        .from('saksi')
+        .insert(saksiList.map((s: any) => ({ ...s, kasus_id: kasusId })))
+      if (sErr) console.error('[SRIKANDI] Saksi error:', sErr.message)
+    }
 
-      // Framework Hukum
-      upsertFrameworkHukum({ ...piipData.framework_hukum, kasus_id: kasusId }),
+    // 6. Framework Hukum
+    const fw = piipData.framework_hukum
+    if (fw) {
+      const { error: fErr } = await sc()
+        .from('framework_hukum')
+        .insert({
+          kasus_id: kasusId,
+          pasal_diduga: fw.pasal_diduga ?? [],
+          unsur_terpenuhi: fw.unsur_terpenuhi || null,
+          unsur_belum_terpenuhi: fw.unsur_belum_terpenuhi || null,
+          catatan_khusus: fw.catatan_khusus || null,
+        })
+      if (fErr) console.error('[SRIKANDI] Framework error:', fErr.message)
+    }
 
-      // Digital Forensik
-      upsertDigitalForensik({ ...piipData.digital_forensik, kasus_id: kasusId }),
-    ])
+    // 7. Digital Forensik
+    const dig = piipData.digital_forensik
+    if (dig && Object.values(dig).some(v => v)) {
+      const { error: dErr } = await sc()
+        .from('digital_forensik')
+        .insert({ ...dig, kasus_id: kasusId })
+      if (dErr) console.error('[SRIKANDI] Digital error:', dErr.message)
+    }
 
-    // 3. Inkonsistensi digital (setelah digital forensik tersimpan)
-    if (piipData.inkonsistensi.length > 0) {
-      await upsertInkonsistensi(
-        piipData.inkonsistensi.map(i => ({ ...i, kasus_id: kasusId }))
-      )
+    // 8. Inkonsistensi
+    const inkList = (piipData.inkonsistensi ?? []).filter((i: any) => i.klaim_tersangka)
+    if (inkList.length > 0) {
+      const { error: iErr } = await sc()
+        .from('inkonsistensi_digital')
+        .insert(inkList.map((i: any) => ({ ...i, kasus_id: kasusId })))
+      if (iErr) console.error('[SRIKANDI] Inkonsistensi error:', iErr.message)
     }
 
     return NextResponse.json({
@@ -128,7 +206,7 @@ export async function POST(req: NextRequest) {
     }, { status: 201 })
 
   } catch (err) {
-    console.error('[SRIKANDI] create-kasus error:', err)
+    console.error('[SRIKANDI] POST /api/kasus fatal error:', err)
     return NextResponse.json(
       { error: err instanceof Error ? err.message : 'Gagal menyimpan kasus' },
       { status: 500 }
@@ -137,24 +215,24 @@ export async function POST(req: NextRequest) {
 }
 
 // ——————————————————————————————————————
-// PATCH — Update Status / Field Kasus
+// PATCH — Update Kasus
 // ——————————————————————————————————————
 export async function PATCH(req: NextRequest) {
   try {
     const { searchParams } = new URL(req.url)
     const id = searchParams.get('id')
-
-    if (!id) {
-      return NextResponse.json(
-        { error: 'id kasus wajib diisi' },
-        { status: 400 }
-      )
-    }
+    if (!id) return NextResponse.json({ error: 'id wajib diisi' }, { status: 400 })
 
     const body = await req.json()
-    const updated = await updateKasus(id, body)
+    const { data, error } = await sc()
+      .from('kasus')
+      .update(body)
+      .eq('id', id)
+      .select()
+      .single()
 
-    return NextResponse.json({ success: true, data: updated })
+    if (error) throw new Error(error.message)
+    return NextResponse.json({ success: true, data })
 
   } catch (err) {
     return NextResponse.json(
