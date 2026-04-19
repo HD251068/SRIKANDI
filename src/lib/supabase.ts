@@ -31,12 +31,19 @@ function getClient(): SupabaseClient {
   return _client
 }
 
-// Export helper — pakai ini di semua fungsi DB
+// Export helpers
+// supabase = anon client (untuk auth)
+// db = service role client (untuk semua operasi DB, bypass RLS)
 export const supabase = new Proxy({} as SupabaseClient, {
   get(_, prop) {
     return (getClient() as any)[prop]
   }
 })
+
+// Service client untuk semua operasi database — bypass RLS
+export function db() {
+  return getServiceClient()
+}
 
 
 // ============================================================
@@ -95,7 +102,7 @@ export async function getPenyidikProfile(authId: string): Promise<Penyidik | nul
 // ============================================================
 
 export async function getSemuaKasus() {
-  const { data, error } = await supabase
+  const { data, error } = await getServiceClient()
     .from('kasus')
     .select(`
       *,
@@ -109,7 +116,7 @@ export async function getSemuaKasus() {
 }
 
 export async function getKasusById(id: string) {
-  const { data, error } = await supabase
+  const { data, error } = await getServiceClient()
     .from('kasus')
     .select(`
       *,
@@ -129,7 +136,7 @@ export async function getKasusById(id: string) {
 }
 
 export async function createKasus(payload: Partial<Kasus>) {
-  const { data, error } = await supabase
+  const { data, error } = await getServiceClient()
     .from('kasus')
     .insert(payload)
     .select()
@@ -139,7 +146,7 @@ export async function createKasus(payload: Partial<Kasus>) {
 }
 
 export async function updateKasus(id: string, payload: Partial<Kasus>) {
-  const { data, error } = await supabase
+  const { data, error } = await getServiceClient()
     .from('kasus')
     .update(payload)
     .eq('id', id)
@@ -154,7 +161,7 @@ export async function updateKasus(id: string, payload: Partial<Kasus>) {
 // ============================================================
 
 export async function upsertTersangka(payload: Partial<Tersangka>) {
-  const { data, error } = await supabase
+  const { data, error } = await getServiceClient()
     .from('tersangka')
     .upsert(payload, { onConflict: 'id' })
     .select()
@@ -168,7 +175,7 @@ export async function upsertTersangka(payload: Partial<Tersangka>) {
 // ============================================================
 
 export async function upsertKorban(items: Partial<Korban>[]) {
-  const { data, error } = await supabase
+  const { data, error } = await getServiceClient()
     .from('korban')
     .upsert(items)
     .select()
@@ -177,7 +184,7 @@ export async function upsertKorban(items: Partial<Korban>[]) {
 }
 
 export async function deleteKorban(id: string) {
-  const { error } = await supabase.from('korban').delete().eq('id', id)
+  const { error } = await getServiceClient().from('korban').delete().eq('id', id)
   if (error) throw error
 }
 
@@ -186,7 +193,7 @@ export async function deleteKorban(id: string) {
 // ============================================================
 
 export async function upsertAlatBukti(items: Partial<AlatBukti>[]) {
-  const { data, error } = await supabase
+  const { data, error } = await getServiceClient()
     .from('alat_bukti')
     .upsert(items)
     .select()
@@ -195,7 +202,7 @@ export async function upsertAlatBukti(items: Partial<AlatBukti>[]) {
 }
 
 export async function deleteAlatBukti(id: string) {
-  const { error } = await supabase.from('alat_bukti').delete().eq('id', id)
+  const { error } = await getServiceClient().from('alat_bukti').delete().eq('id', id)
   if (error) throw error
 }
 
@@ -204,7 +211,7 @@ export async function deleteAlatBukti(id: string) {
 // ============================================================
 
 export async function upsertSaksi(items: Partial<Saksi>[]) {
-  const { data, error } = await supabase
+  const { data, error } = await getServiceClient()
     .from('saksi')
     .upsert(items)
     .select()
@@ -213,7 +220,7 @@ export async function upsertSaksi(items: Partial<Saksi>[]) {
 }
 
 export async function deleteSaksi(id: string) {
-  const { error } = await supabase.from('saksi').delete().eq('id', id)
+  const { error } = await getServiceClient().from('saksi').delete().eq('id', id)
   if (error) throw error
 }
 
@@ -222,7 +229,7 @@ export async function deleteSaksi(id: string) {
 // ============================================================
 
 export async function upsertFrameworkHukum(payload: Partial<FrameworkHukum>) {
-  const { data, error } = await supabase
+  const { data, error } = await getServiceClient()
     .from('framework_hukum')
     .upsert(payload, { onConflict: 'kasus_id' })
     .select()
@@ -236,7 +243,7 @@ export async function upsertFrameworkHukum(payload: Partial<FrameworkHukum>) {
 // ============================================================
 
 export async function upsertDigitalForensik(payload: Partial<DigitalForensik>) {
-  const { data, error } = await supabase
+  const { data, error } = await getServiceClient()
     .from('digital_forensik')
     .upsert(payload, { onConflict: 'kasus_id' })
     .select()
@@ -246,7 +253,7 @@ export async function upsertDigitalForensik(payload: Partial<DigitalForensik>) {
 }
 
 export async function upsertInkonsistensi(items: Partial<InkonsistensiDigital>[]) {
-  const { data, error } = await supabase
+  const { data, error } = await getServiceClient()
     .from('inkonsistensi_digital')
     .upsert(items)
     .select()
@@ -255,7 +262,7 @@ export async function upsertInkonsistensi(items: Partial<InkonsistensiDigital>[]
 }
 
 export async function deleteInkonsistensi(id: string) {
-  const { error } = await supabase
+  const { error } = await getServiceClient()
     .from('inkonsistensi_digital').delete().eq('id', id)
   if (error) throw error
 }
@@ -265,7 +272,7 @@ export async function deleteInkonsistensi(id: string) {
 // ============================================================
 
 export async function saveIntelligencePackage(payload: Partial<IntelligencePackage>) {
-  const { data, error } = await supabase
+  const { data, error } = await getServiceClient()
     .from('intelligence_package')
     .insert(payload)
     .select()
@@ -275,7 +282,7 @@ export async function saveIntelligencePackage(payload: Partial<IntelligencePacka
 }
 
 export async function getLatestPackage(kasusId: string) {
-  const { data, error } = await supabase
+  const { data, error } = await getServiceClient()
     .from('intelligence_package')
     .select('*')
     .eq('kasus_id', kasusId)
@@ -291,7 +298,7 @@ export async function getLatestPackage(kasusId: string) {
 // ============================================================
 
 export async function createSesiInterogasi(payload: Partial<SesiInterogasi>) {
-  const { data, error } = await supabase
+  const { data, error } = await getServiceClient()
     .from('sesi_interogasi')
     .insert(payload)
     .select()
@@ -301,7 +308,7 @@ export async function createSesiInterogasi(payload: Partial<SesiInterogasi>) {
 }
 
 export async function getSesiByKasus(kasusId: string) {
-  const { data, error } = await supabase
+  const { data, error } = await getServiceClient()
     .from('sesi_interogasi')
     .select('*, transcript_interogasi(*)')
     .eq('kasus_id', kasusId)
@@ -315,7 +322,7 @@ export async function getSesiByKasus(kasusId: string) {
 // ============================================================
 
 export async function insertTranscript(payload: Partial<TranscriptInterogasi>) {
-  const { data, error } = await supabase
+  const { data, error } = await getServiceClient()
     .from('transcript_interogasi')
     .insert(payload)
     .select()
@@ -325,7 +332,7 @@ export async function insertTranscript(payload: Partial<TranscriptInterogasi>) {
 }
 
 export async function koreksiTranscript(id: string, teksKoreksi: string) {
-  const { data, error } = await supabase
+  const { data, error } = await getServiceClient()
     .from('transcript_interogasi')
     .update({ teks_koreksi: teksKoreksi, is_corrected: true })
     .eq('id', id)
@@ -340,7 +347,7 @@ export async function koreksiTranscript(id: string, teksKoreksi: string) {
 // ============================================================
 
 export async function saveBAPDraft(payload: Partial<BAPDraft>) {
-  const { data, error } = await supabase
+  const { data, error } = await getServiceClient()
     .from('bap_draft')
     .insert(payload)
     .select()
@@ -350,7 +357,7 @@ export async function saveBAPDraft(payload: Partial<BAPDraft>) {
 }
 
 export async function updateBAPStatus(id: string, status: BAPDraft['status']) {
-  const { data, error } = await supabase
+  const { data, error } = await getServiceClient()
     .from('bap_draft')
     .update({ status })
     .eq('id', id)
@@ -365,11 +372,12 @@ export async function updateBAPStatus(id: string, status: BAPDraft['status']) {
 // ============================================================
 
 export async function getDashboardStats() {
+  const sc = getServiceClient()
   const [kasusAktif, kasusP21, kasusSP3, kasusTotal] = await Promise.all([
-    supabase.from('kasus').select('id', { count: 'exact' }).eq('status', 'aktif'),
-    supabase.from('kasus').select('id', { count: 'exact' }).eq('status', 'p21'),
-    supabase.from('kasus').select('id', { count: 'exact' }).eq('status', 'sp3'),
-    supabase.from('kasus').select('id', { count: 'exact' }),
+    sc.from('kasus').select('id', { count: 'exact' }).eq('status', 'aktif'),
+    sc.from('kasus').select('id', { count: 'exact' }).eq('status', 'p21'),
+    sc.from('kasus').select('id', { count: 'exact' }).eq('status', 'sp3'),
+    sc.from('kasus').select('id', { count: 'exact' }),
   ])
   return {
     aktif: kasusAktif.count ?? 0,
