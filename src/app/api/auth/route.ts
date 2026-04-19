@@ -53,9 +53,25 @@ export async function POST(req: NextRequest) {
 
       const profil = await getPenyidikProfile(data.user.id)
 
-      if (!profil || !profil.is_active) {
+      // Debug log — hapus setelah login berhasil
+      console.log('[SRIKANDI] profil:', JSON.stringify(profil))
+      console.log('[SRIKANDI] is_active raw:', profil?.is_active, typeof profil?.is_active)
+
+      if (!profil) {
         return NextResponse.json(
-          { error: 'Akun tidak aktif. Hubungi administrator.' },
+          { error: 'Profil penyidik tidak ditemukan di database.' },
+          { status: 403 }
+        )
+      }
+
+      // Cek is_active — handle boolean dan string '1'/'true'
+      const isActive = profil.is_active === true 
+        || (profil.is_active as unknown as string) === 'true'
+        || (profil.is_active as unknown as number) === 1
+
+      if (!isActive) {
+        return NextResponse.json(
+          { error: `Akun tidak aktif. is_active=${profil.is_active}` },
           { status: 403 }
         )
       }
