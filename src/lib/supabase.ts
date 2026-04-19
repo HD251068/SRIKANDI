@@ -40,6 +40,19 @@ export const supabase = new Proxy({} as SupabaseClient, {
 
 
 // ============================================================
+// SERVICE ROLE CLIENT — bypass RLS untuk operasi server-side
+// Hanya dipakai di API routes, tidak pernah di browser
+// ============================================================
+function getServiceClient() {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY
+  if (!url || !key) {
+    throw new Error('Missing Supabase service role env vars')
+  }
+  return createClient(url, key)
+}
+
+// ============================================================
 // AUTH HELPERS
 // ============================================================
 
@@ -64,13 +77,17 @@ export async function getCurrentUser() {
 }
 
 export async function getPenyidikProfile(authId: string): Promise<Penyidik | null> {
-  const { data, error } = await supabase
+  // Pakai service role client agar tidak diblokir RLS
+  const { data, error } = await getServiceClient()
     .from('penyidik')
     .select('*')
     .eq('auth_id', authId)
     .single()
-  if (error) return null
-  return data
+  if (error) {
+    console.error('[SRIKANDI] getPenyidikProfile error:', error.message)
+    return null
+  }
+  return data as Penyidik
 }
 
 // ============================================================
